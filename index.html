@@ -1,0 +1,285 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <meta charset="UTF-8">
+    <title>Secure Firebase Login System with Roles & Mini Games</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <style>
+        /* Basic styling */
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+        }
+
+        .section {
+            margin-bottom: 20px;
+            padding: 15px;
+            border: 1px solid #ccc;
+        }
+
+        input,
+        select {
+            display: block;
+            margin: 8px 0;
+            padding: 5px;
+            width: 100%;
+            max-width: 300px;
+        }
+
+        button {
+            padding: 8px 12px;
+            margin-top: 10px;
+        }
+
+        iframe {
+            width: 100%;
+            height: 600px;
+            border: none;
+        }
+    </style>
+</head>
+
+<body>
+    <h1>Secure Firebase Login System with Roles & Mini Games</h1>
+
+    <!-- Login Section -->
+    <div id="login-section" class="section">
+        <h2>Login</h2>
+        <input type="email" id="login-email" placeholder="Email" required>
+        <input type="password" id="login-password" placeholder="Password" required>
+        <button onclick="login()">Login</button>
+        <p>Don't have an account? <a href="#" onclick="showSignup()">Sign Up</a></p>
+    </div>
+
+    <!-- Signup Section -->
+    <div id="signup-section" class="section" style="display:none;">
+        <h2>Sign Up</h2>
+        <input type="text" id="signup-name" placeholder="Full Name" required>
+        <input type="email" id="signup-email" placeholder="Email" required>
+        <input type="password" id="signup-password" placeholder="Password" required>
+        <select id="signup-role">
+            <option value="player">Player</option>
+            <option value="teamLeader">Team Leader</option>
+            <option value="admin">Admin</option>
+        </select>
+        <input type="text" id="signup-team" placeholder="Team (optional)">
+        <button onclick="signup()">Sign Up</button>
+        <p>Already have an account? <a href="#" onclick="showLogin()">Login</a></p>
+    </div>
+
+    <!-- Dashboard Section -->
+    <div id="dashboard" class="section" style="display:none;">
+        <h2>Dashboard</h2>
+        <p id="user-info"></p>
+        <button onclick="logout()">Logout</button>
+        <hr>
+        <!-- Personal Info Section -->
+        <div id="personal-info">
+            <h3>Your Personal Info</h3>
+            <input type="text" id="personal-name" placeholder="Full Name">
+            <input type="text" id="personal-phone" placeholder="Phone Number">
+            <button onclick="updatePersonalInfo()">Update Info</button>
+        </div>
+        <hr>
+        <!-- Admin / Team Leader Panel -->
+        <div id="admin-panel" style="display:none;">
+            <h3 id="panel-title"></h3>
+            <div id="players-list"></div>
+        </div>
+        <hr>
+        <!-- Mini Games Panel -->
+        <div id="mini-games-panel">
+            <h3>Mini Games</h3>
+            <!-- The embedded game page located at games/mine.html -->
+            <iframe src="games/mine.html"></iframe>
+        </div>
+    </div>
+
+    <script type="module">
+        // Import necessary Firebase functions using modular syntax
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/9.6.10/firebase-app.js";
+        import { getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/9.6.10/firebase-auth.js";
+        import { getFirestore, doc, setDoc, getDoc, updateDoc, collection, getDocs, query, where } from "https://www.gstatic.com/firebasejs/9.6.10/firebase-firestore.js";
+
+        // Your Firebase configuration
+        const firebaseConfig = {
+            apiKey: "AIzaSyComUVknlFPJVjHOSZ4hS7GLJAZaiotkk0",
+            authDomain: "betting-3cf32.firebaseapp.com",
+            projectId: "betting-3cf32",
+            storageBucket: "betting-3cf32.firebasestorage.app",
+            messagingSenderId: "596221419027",
+            appId: "1:596221419027:web:54b36c8ebeb1b2ee1d29e6"
+        };
+
+        // Initialize Firebase
+        const app = initializeApp(firebaseConfig);
+        const auth = getAuth(app);
+        const db = getFirestore(app);
+
+        let currentUserData = null; // Global variable to hold logged-in user's data
+
+        // Functions to show/hide sections
+        function showSignup() {
+            document.getElementById("login-section").style.display = "none";
+            document.getElementById("signup-section").style.display = "block";
+        }
+        function showLogin() {
+            document.getElementById("signup-section").style.display = "none";
+            document.getElementById("login-section").style.display = "block";
+        }
+
+        // Signup new user with role and optional team
+        async function signup() {
+            const name = document.getElementById("signup-name").value;
+            const email = document.getElementById("signup-email").value;
+            const password = document.getElementById("signup-password").value;
+            const role = document.getElementById("signup-role").value;
+            const team = document.getElementById("signup-team").value;
+
+            try {
+                const userCredential = await createUserWithEmailAndPassword(auth, email, password);
+                const user = userCredential.user;
+                // Create user's document in "users" collection
+                await setDoc(doc(db, "users", user.uid), {
+                    name: name,
+                    email: email,
+                    phone: "",
+                    role: role,
+                    team: team ? team : null
+                });
+                alert("Signup successful! Please log in.");
+                showLogin();
+            } catch (error) {
+                alert("Error: " + error.message);
+            }
+        }
+
+        // Login user
+        async function login() {
+            const email = document.getElementById("login-email").value;
+            const password = document.getElementById("login-password").value;
+            try {
+                await signInWithEmailAndPassword(auth, email, password);
+            } catch (error) {
+                alert("Error: " + error.message);
+            }
+        }
+
+        // Logout user
+        async function logout() {
+            try {
+                await signOut(auth);
+            } catch (error) {
+                alert("Error: " + error.message);
+            }
+        }
+
+        // Update the logged-in user's personal info
+        async function updatePersonalInfo() {
+            const user = auth.currentUser;
+            if (!user) return;
+            const newName = document.getElementById("personal-name").value;
+            const newPhone = document.getElementById("personal-phone").value;
+            try {
+                await updateDoc(doc(db, "users", user.uid), {
+                    name: newName,
+                    phone: newPhone
+                });
+                alert("Personal info updated.");
+            } catch (error) {
+                alert("Error: " + error.message);
+            }
+        }
+
+        // Load players' data for admin/teamLeader panel
+        async function loadPlayers(role, team) {
+            const playersListDiv = document.getElementById("players-list");
+            playersListDiv.innerHTML = "";
+            let playersQuery;
+            if (role === "admin") {
+                // Admin sees all players from the "points" collection
+                playersQuery = collection(db, "points");
+            } else if (role === "teamLeader") {
+                // Team Leader sees only players on the same team
+                playersQuery = query(collection(db, "points"), where("team", "==", team));
+            } else {
+                return;
+            }
+
+            const snapshot = await getDocs(playersQuery);
+            snapshot.forEach((docSnap) => {
+                const player = docSnap.data();
+                const div = document.createElement("div");
+                div.innerHTML = `
+          <strong>${player.name || "Unnamed Player"}</strong> - Points: <span id="points-${docSnap.id}">${player.points || 0}</span>
+          <input type="number" id="new-points-${docSnap.id}" placeholder="New Points">
+          <button onclick="updatePoints('${docSnap.id}')">Update Points</button>
+          <hr>
+        `;
+                playersListDiv.appendChild(div);
+            });
+        }
+
+        // Update a player's points (admin/teamLeader functionality)
+        async function updatePoints(docId) {
+            const newPoints = parseInt(document.getElementById("new-points-" + docId).value);
+            if (isNaN(newPoints)) {
+                alert("Please enter a valid number.");
+                return;
+            }
+            try {
+                await updateDoc(doc(db, "points", docId), {
+                    points: newPoints
+                });
+                document.getElementById("points-" + docId).innerText = newPoints;
+                alert("Points updated.");
+            } catch (error) {
+                alert("Error: " + error.message);
+            }
+        }
+
+        // Listen for auth state changes and update the UI accordingly
+        onAuthStateChanged(auth, async (user) => {
+            if (user) {
+                // Hide login/signup, show dashboard
+                document.getElementById("login-section").style.display = "none";
+                document.getElementById("signup-section").style.display = "none";
+                document.getElementById("dashboard").style.display = "block";
+                document.getElementById("user-info").innerText = "Logged in as: " + user.email;
+
+                // Load user's personal info
+                const userDoc = await getDoc(doc(db, "users", user.uid));
+                if (userDoc.exists()) {
+                    currentUserData = userDoc.data();
+                    document.getElementById("personal-name").value = currentUserData.name;
+                    document.getElementById("personal-phone").value = currentUserData.phone;
+
+                    // Show the admin/teamLeader panel if applicable
+                    if (currentUserData.role === "admin" || currentUserData.role === "teamLeader") {
+                        document.getElementById("admin-panel").style.display = "block";
+                        document.getElementById("panel-title").innerText = currentUserData.role === "admin" ? "Admin Panel" : "Team Leader Panel";
+                        loadPlayers(currentUserData.role, currentUserData.team);
+                    } else {
+                        document.getElementById("admin-panel").style.display = "none";
+                    }
+                }
+            } else {
+                // User is signed out: show login section
+                document.getElementById("login-section").style.display = "block";
+                document.getElementById("dashboard").style.display = "none";
+            }
+        });
+
+        // Expose functions to global scope for inline event handlers
+        window.showSignup = showSignup;
+        window.showLogin = showLogin;
+        window.signup = signup;
+        window.login = login;
+        window.logout = logout;
+        window.updatePersonalInfo = updatePersonalInfo;
+        window.updatePoints = updatePoints;
+    </script>
+</body>
+
+</html>
